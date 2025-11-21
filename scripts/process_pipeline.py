@@ -135,9 +135,21 @@ def download_video(
 class GeminiKeyManager:
     """Simple Gemini key manager with rotation"""
 
-    def __init__(self, keys: List[Dict]):
+    def __init__(self, keys: List):
         import random
-        self.keys = [k for k in keys if k.get('status') == 'active']
+        # Handle both formats: list of strings or list of dicts
+        self.keys = []
+        for k in keys:
+            if isinstance(k, str):
+                # Plain string key - convert to dict format
+                self.keys.append({'key': k, 'status': 'active'})
+            elif isinstance(k, dict):
+                # Dictionary format - only include active keys
+                if k.get('status') == 'active':
+                    self.keys.append(k)
+            else:
+                logger.warning(f"Skipping invalid key format: {type(k)}")
+        
         self.current_index = random.randint(0, len(self.keys) - 1) if self.keys else 0
         logger.info(f"Initialized with {len(self.keys)} keys, starting at index {self.current_index}")
 
