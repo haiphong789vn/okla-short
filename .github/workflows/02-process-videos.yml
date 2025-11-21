@@ -1,0 +1,88 @@
+name: "Pipeline 2: Process Videos to Shorts"
+
+on:
+  # Run every 5 hours
+  schedule:
+    - cron: '0 */5 * * *'
+
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: 'Maximum number of videos to process'
+        required: false
+        type: number
+        default: 5
+
+jobs:
+  process-videos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350  # 5h 50m (留一点时间用于清理)
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Create YouTube cookies file
+        run: |
+          echo "${{ secrets.YOUTUBE_COOKIES }}" | base64 -d > youtube_cookies.txt
+
+      - name: Create Gemini keys JSON
+        env:
+          GEMINI_KEYS: ${{ secrets.GEMINI_KEYS_JSON }}
+        run: |
+          # Write secret from environment variable (safer than inline substitution)
+          echo "$GEMINI_KEYS" > gemini_keys_temp.json
+
+      - name: Run video processing pipeline
+        env:
+          # Database
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+          # Cloudflare R2
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          R2_PUBLIC_URL: ${{ secrets.R2_PUBLIC_URL }}
+
+          # Gemini API Keys
+          GEMINI_KEYS_JSON: ${{ secrets.GEMINI_KEYS_JSON }}
+
+          # Hugging Face API (Backup for Gemini 503 errors)
+          HUGGINGFACE_API_TOKEN: ${{ secrets.HUGGINGFACE_API_TOKEN }}
+        run: |
+          # Convert limit to integer (GitHub Actions type: number can be float)
+          LIMIT=$(printf "%.0f" "${{ inputs.limit || 5 }}")
+
+          python scripts/process_pipeline.py \
+            --limit $LIMIT \
+            --cookies youtube_cookies.txt
+
+      - name: Cleanup sensitive files
+        if: always()
+        run: |
+          rm -f youtube_cookies.txt
+          rm -f gemini_keys_temp.json
+
+      - name: Report processing results
+        if: always()
+        run: |
+          echo "Video processing workflow completed"
+          echo "Limit: ${{ inputs.limit || 5 }} videos"
