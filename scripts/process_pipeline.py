@@ -285,32 +285,42 @@ def call_gemini_api(
             logger.error("Hugging Face backup also failed")
             return None
 
+    # Log first 20 characters of API key for debugging
+    logger.info(f"Using API key (first 20 chars): {api_key[:20]}...")
+
     headers = {
         "Content-Type": "application/json",
         "x-goog-api-key": api_key
     }
 
+    # Simplified payload matching curl example (without generationConfig to avoid 400 errors)
     payload = {
         "contents": [{
             "parts": [{"text": prompt}]
-        }],
-        "generationConfig": {
-            "temperature": 0.7,
-            "topK": 40,
-            "topP": 0.95,
-            "maxOutputTokens": 4096
-        }
+        }]
     }
 
     try:
         logger.info(f"Calling Gemini API - Key {key_manager.current_index + 1}/{key_manager.get_active_count()} (retry {retry_count}/{MAX_GEMINI_RETRIES})")
-        response = requests.post(GEMINI_ENDPOINT, headers=headers, json=payload, timeout=60)
+        
+        # Log request payload for debugging (first 500 chars of prompt)
+        logger.debug(f"Request payload: {json.dumps(payload, ensure_ascii=False)[:500]}...")
+        
+        response = requests.post(GEMINI_ENDPOINT, headers=headers, json=payload, timeout=120)
         response.raise_for_status()
 
         return response.json()
 
     except requests.exceptions.HTTPError as e:
         status_code = e.response.status_code if e.response else None
+        
+        # Log detailed error response for debugging
+        if e.response:
+            try:
+                error_body = e.response.json()
+                logger.error(f"Gemini API error response: {json.dumps(error_body, indent=2)}")
+            except:
+                logger.error(f"Gemini API error response (raw): {e.response.text[:500]}")
 
         if status_code in [400, 403, 429, 503]:
             error_msg = f"HTTP {status_code}"
@@ -508,7 +518,21 @@ LƯU Ý:
             if attempt < max_retries - 1:
                 time.sleep(2)
                 continue
-            return None
+            else:
+                # All Gemini attempts failed, try Hugging Face as fallback
+                logger.warning("All Gemini retry attempts exhausted, trying Hugging Face API as backup...")
+                hf_response = call_huggingface_api(prompt)
+                if hf_response:
+                    logger.info("✓ Successfully switched to Hugging Face API backup")
+                    segments = parse_gemini_response(hf_response)
+                    if segments:
+                        return segments
+                    else:
+                        logger.error("Failed to parse Hugging Face response")
+                        return None
+                else:
+                    logger.error("Hugging Face backup also failed")
+                    return None
 
         segments = parse_gemini_response(response)
         
