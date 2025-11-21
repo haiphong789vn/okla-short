@@ -164,7 +164,7 @@ class NoTranscriptVideo(Base):
 
 # Database engine and session with resilient pooling
 # Get DATABASE_URL and validate it exists
-database_url = os.getenv('DATABASE_URL')
+database_url = os.getenv('DATABASE_URL', '').strip()
 if not database_url:
     raise ValueError(
         "DATABASE_URL environment variable is not set. "
