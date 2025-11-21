@@ -1,0 +1,14 @@
+# Core dependencies
+yt-dlp>=2024.0.0
+requests>=2.31.0
+cloudscraper>=1.2.71
+
+# Database
+sqlalchemy>=2.0.0
+pg8000>=1.30.0
+
+# Cloud storage
+boto3>=1.34.0
+
+# Optional (for local testing)
+python-dotenv>=1.0.0
