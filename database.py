@@ -163,8 +163,18 @@ class NoTranscriptVideo(Base):
         }
 
 # Database engine and session with resilient pooling
+# Get DATABASE_URL and validate it exists
+database_url = os.getenv('DATABASE_URL')
+if not database_url:
+    raise ValueError(
+        "DATABASE_URL environment variable is not set. "
+        "Please set it to a valid database connection string, e.g.:\n"
+        "  - PostgreSQL: postgresql://user:password@host:port/database\n"
+        "  - SQLite: sqlite:///path/to/database.db"
+    )
+
 engine = create_engine(
-    os.getenv('DATABASE_URL'),
+    database_url,
     echo=False,
     pool_pre_ping=True,
     pool_recycle=1800,
